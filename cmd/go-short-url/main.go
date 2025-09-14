@@ -2,6 +2,8 @@ package main
 
 import (
 	"go-short-url/internal/config"
+	"go-short-url/internal/lib/logger/sl"
+	"go-short-url/internal/storage/sqlite"
 	"log/slog"
 	"os"
 )
@@ -17,10 +19,15 @@ func main() {
 
 	log := setupLogger(cfg.Env)
 	log.Info("start")
-	// TODO init logger: slog
 
-	// TODO init storage: sqlite or postgresql
+	storage, err := sqlite.New(cfg.StoragePath)
+	if err != nil {
+		// мб как-то полегче это можно делать
+		log.Error("не удалось инициализировать хранилище", sl.Err(err))
+		os.Exit(1)
+	}
 
+	_ = storage
 	// TODO init router: chi
 
 	// TODO run server
