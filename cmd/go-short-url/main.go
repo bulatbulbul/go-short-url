@@ -27,6 +27,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	id, err := storage.SaveURL("https://www.googl4e.com", "go4ogle")
+	if err != nil {
+		log.Error("ошибка при сохранении url", sl.Err(err))
+		os.Exit(1)
+	}
+	log.Info("сохранен url", slog.Int64("id", id))
+
 	_ = storage
 	// TODO init router: chi
 
