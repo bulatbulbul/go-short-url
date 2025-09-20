@@ -22,19 +22,31 @@ func main() {
 
 	storage, err := sqlite.New(cfg.StoragePath)
 	if err != nil {
-		// мб как-то полегче это можно делать
 		log.Error("не удалось инициализировать хранилище", sl.Err(err))
 		os.Exit(1)
 	}
-
-	id, err := storage.SaveURL("https://www.googl4e.com", "go4ogle")
+	id, err := storage.SaveURL("https://stepik4555.org", "stepik4555")
 	if err != nil {
-		log.Error("ошибка при сохранении url", sl.Err(err))
+		log.Error("не смогли добавить ", id, sl.Err(err))
 		os.Exit(1)
 	}
-	log.Info("сохранен url", slog.Int64("id", id))
+	log.Info("без ошибок добавили")
 
+	resStr, err := storage.GetURL("stepik")
+	if err != nil {
+		log.Error("не смогли дать ссылку", sl.Err(err))
+		os.Exit(1)
+	}
+	log.Info("без ошибок получили", resStr)
+
+	err = storage.DeleteURL("https://stepik.org")
+	if err != nil {
+		log.Error("не смогли удалить", sl.Err(err))
+		os.Exit(1)
+	}
+	log.Info("без ошибок удалили")
 	_ = storage
+
 	// TODO init router: chi
 
 	// TODO run server

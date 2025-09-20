@@ -39,6 +39,7 @@ func New(storagePath string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
+// TODO запросы отдельно в q
 func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 	const op = "storage.sqlite.SaveURL"
 
@@ -61,4 +62,36 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 		return 0, fmt.Errorf("%s: не удалось получить идентификатор последней вставки: %w", op, err)
 	}
 	return id, nil
+}
+
+// TODO
+func (s *Storage) GetURL(alias string) (string, error) {
+	const op = "storage.sqlite.GetURL"
+	q := "SELECT url FROM url WHERE alias = ?"
+
+	var result string
+	err := s.db.QueryRow(q, alias).Scan(&result)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("%s: %w", op, storage.ErrURLFound)
+		}
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+	return result, nil
+}
+
+func (s *Storage) DeleteURL(alias string) error {
+	const op = "storage.sqlite.DeleteURL"
+
+	res, err := s.db.Exec("DELETE FROM url WHERE alias = ?", alias)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err == nil && rows == 0 {
+		return fmt.Errorf("%s: %w", op, storage.ErrURLFound)
+	}
+
+	return nil
 }
