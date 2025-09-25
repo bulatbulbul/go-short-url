@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/fatih/color"
+	"go-short-url/internal/http-server/handlers/url/save"
 	"log/slog"
 	"os"
 
@@ -43,6 +44,7 @@ func main() {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
+	router.Post("/url", save.New(log, storage))
 	// TODO run server
 
 }
