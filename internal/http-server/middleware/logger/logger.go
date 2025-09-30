@@ -8,6 +8,13 @@ import (
 	"log/slog"
 )
 
+// воспринимать как библиотеку
+// для чего это?
+// middleware-логгер нужен для прозрачности:
+// чтобы видеть поток запросов и их результаты.
+// Без него сервер — как чёрный ящик:
+// запрос зашёл → ответ вышел,
+// а что внутри происходило — непонятно.
 func New(log *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		log := log.With(

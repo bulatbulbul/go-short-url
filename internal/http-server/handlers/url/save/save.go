@@ -13,23 +13,33 @@ import (
 	"net/http"
 )
 
+// если вдруг забуду
+//Alias — это короткий код, который заменяет длинный URL
+
+// структура для запроса POST /save
 type Request struct {
 	URL   string `json:"url" validate:"required,url"`
 	Alias string `json:"alias,omitempty"`
 }
 
+// структура ответа
 type Response struct {
 	resp.Response
 	Alias string `json:"alias,omitempty"`
 }
 
 // TODO: move to config if needed
-const aliasLenght = 6
+const aliasLength = 6
 
 type URLSaver interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
 }
 
+// Принимает запрос POST /save.
+// Проверяет входные данные (JSON + валидация).
+// Генерирует alias, если не передан.
+// Сохраняет в хранилище.
+// Отправляет JSON-ответ с alias.
 func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.url.save.New"
@@ -41,6 +51,7 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 
 		var req Request
 
+		// Декодируем JSON-запрос
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
@@ -52,6 +63,7 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 
 		log.Info("request body decoded", slog.Any("request", req))
 
+		// Валидируем структуру запроса
 		if err := validator.New().Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
 
@@ -63,11 +75,13 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 			return
 		}
 
+		// Генерация alias, если не передан
 		alias := req.Alias
 		if alias == "" {
-			alias = random.NewRandomString(aliasLenght)
+			alias = random.NewRandomString(aliasLength)
 		}
 
+		// Сохраняем URL через urlSaver
 		id, err := urlSaver.SaveURL(req.URL, alias)
 		if errors.Is(err, storage.ErrURLExists) {
 			log.Info("url already exists", slog.String("url", req.URL))
@@ -86,11 +100,13 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 
 		log.Info("url added", slog.Int64("id", id))
 
+		// Отправляем успешный JSON-ответ с alias
 		responseOK(w, r, alias)
 
 	}
 }
 
+// формирует успешный ответ с alias
 func responseOK(w http.ResponseWriter, r *http.Request, alias string) {
 	render.JSON(w, r, Response{
 		Response: resp.OK(),

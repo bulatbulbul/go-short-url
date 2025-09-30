@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+// omitempty значит, что если поле пустое,
+// оно не будет попадать в JSON.
 type Response struct {
 	Status string `json:"status"`
 	Error  string `json:"error,omitempty"`
