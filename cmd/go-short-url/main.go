@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/fatih/color"
+	"go-short-url/internal/http-server/handlers/redirect"
 	"go-short-url/internal/http-server/handlers/url/save"
 	"log/slog"
 	"net/http"
@@ -46,6 +47,10 @@ func main() {
 	router.Use(middleware.URLFormat)
 
 	router.Post("/url", save.New(log, storage))
+	router.Get("/{alias}", redirect.New(log, storage))
+
+	// TODO Handlers: Delete
+	//router.Delete("url/{alias}", redirect.New(log, storage))
 
 	log.Info("starting server", slog.String("address", cfg.Address))
 

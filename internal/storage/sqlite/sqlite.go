@@ -73,7 +73,7 @@ func (s *Storage) GetURL(alias string) (string, error) {
 	err := s.db.QueryRow(q, alias).Scan(&result)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", fmt.Errorf("%s: %w", op, storage.ErrURLFound)
+			return "", fmt.Errorf("%s: %w", op, storage.ErrURLNotFound)
 		}
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
@@ -90,7 +90,7 @@ func (s *Storage) DeleteURL(alias string) error {
 
 	rows, err := res.RowsAffected()
 	if err == nil && rows == 0 {
-		return fmt.Errorf("%s: %w", op, storage.ErrURLFound)
+		return fmt.Errorf("%s: %w", op, storage.ErrURLNotFound)
 	}
 
 	return nil

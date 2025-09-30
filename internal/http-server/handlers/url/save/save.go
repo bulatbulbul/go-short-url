@@ -44,14 +44,16 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.url.save.New"
 
+		// Добавляем к текущму объекту логгера поля op и request_id
+		// Они могут очень упростить нам жизнь в будущем
 		log = log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
+		// Создаем объект запроса и анмаршаллим в него запрос
 		var req Request
 
-		// Декодируем JSON-запрос
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
