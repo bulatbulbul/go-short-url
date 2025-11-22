@@ -10,7 +10,7 @@ http://localhost:8082
 ## Что внутри
 
 - SQLite база — хранение ссылок (storage.db)
-- REST API на базе chi
+- REST API на базе GIN
 - Логирование — log/slog
 - Конфигурация — через config/local.yaml
 ---
