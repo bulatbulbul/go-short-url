@@ -2,63 +2,47 @@ package redirect
 
 import (
 	"errors"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
-	resp "go-short-url/internal/lib/api/response"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"go-short-url/internal/lib/api/response"
 	"go-short-url/internal/lib/logger/sl"
 	"go-short-url/internal/storage"
 	"log/slog"
-	"net/http"
 )
 
 type URLGetter interface {
 	GetURL(alias string) (string, error)
 }
 
-func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "handlers.url.redirect.New"
+func New(log *slog.Logger, getter URLGetter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		const op = "handlers.redirect.New"
 
-		log := log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
-		)
+		log := log.With(slog.String("op", op))
 
-		// Роутер chi позволяет делать вот такие финты -
-		// получать GET-параметры по их именам.
-		// Имена определяются при добавлении хэндлера в роутер, это будет ниже.
-		alias := chi.URLParam(r, "alias")
+		alias := c.Param("alias")
 		if alias == "" {
-			log.Info("alias is empty")
-
-			render.JSON(w, r, resp.Error("invalid request"))
-
+			log.Info("empty alias")
+			c.JSON(http.StatusBadRequest, response.Error("invalid alias"))
 			return
 		}
 
-		// Находим URL по алиасу в БД
-		resURL, err := urlGetter.GetURL(alias)
+		url, err := getter.GetURL(alias)
 		if errors.Is(err, storage.ErrURLNotFound) {
-			// Не нашли URL, сообщаем об этом клиенту
-			log.Info("url not found", "alias", alias)
-
-			render.JSON(w, r, resp.Error("not found"))
-
+			log.Info("url not found", slog.String("alias", alias))
+			c.JSON(http.StatusNotFound, response.Error("not found"))
 			return
 		}
 		if err != nil {
-			// Не удалось осуществить поиск
 			log.Error("failed to get url", sl.Err(err))
-
-			render.JSON(w, r, resp.Error("internal error"))
-
+			c.JSON(http.StatusInternalServerError, response.Error("internal error"))
 			return
 		}
 
-		log.Info("got url", slog.String("url", resURL))
+		log.Info("redirecting", slog.String("url", url))
 
-		// Делаем редирект на найденный URL
-		http.Redirect(w, r, resURL, http.StatusFound)
+		c.Redirect(http.StatusFound, url)
 	}
 }

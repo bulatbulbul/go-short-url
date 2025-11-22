@@ -1,66 +1,46 @@
 package main
 
 import (
-	"github.com/fatih/color"
-	"go-short-url/internal/http-server/handlers/redirect"
-	"go-short-url/internal/http-server/handlers/url/save"
+	"github.com/gin-gonic/gin"
+	url "go-short-url/internal/http-server/handlers/url/delete"
 	"log/slog"
 	"net/http"
 	"os"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-
 	"go-short-url/internal/config"
+	"go-short-url/internal/http-server/handlers/redirect"
+	"go-short-url/internal/http-server/handlers/url/save"
 	mwLogger "go-short-url/internal/http-server/middleware/logger"
 	"go-short-url/internal/lib/logger/handlers/slogpretty"
-	"go-short-url/internal/lib/logger/sl"
 	"go-short-url/internal/storage/sqlite"
-)
-
-const (
-	envLocal = "local"
-	envDev   = "dev"
-	envProd  = "prod"
 )
 
 func main() {
 	cfg := config.MustLoad()
 
 	log := setupLogger(cfg.Env)
-	log.Info("start", slog.String("env", cfg.Env))
-	log.Debug("debug")
-	log.Error("error")
+	log.Info("starting", slog.String("env", cfg.Env))
 
+	// Storage
 	storage, err := sqlite.New(cfg.StoragePath)
 	if err != nil {
-		log.Error("не удалось инициализировать хранилище", sl.Err(err))
+		log.Error("failed to init storage", slog.Any("err", err))
 		os.Exit(1)
 	}
-	_ = storage
-	router := chi.NewRouter()
 
-	router.Use(middleware.RequestID)
-	router.Use(middleware.Logger)
+	// Gin
+	router := gin.New()
 	router.Use(mwLogger.New(log))
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.URLFormat)
+	router.Use(gin.Recovery())
 
-	// авторизация
-	router.Route("/url", func(r chi.Router) {
-		r.Use(middleware.BasicAuth("url-shortener", map[string]string{
-			cfg.HTTPServer.User: cfg.HTTPServer.Password,
-		}))
-		r.Post("/", save.New(log, storage))
-		// TODO: add Delete /url/{id}
-	})
+	// POST /add
+	router.POST("/add", save.New(log, storage))
 
-	router.Get("/{alias}", redirect.New(log, storage))
+	// GET /:alias
+	router.GET("/:alias", redirect.New(log, storage))
 
-	// TODO Handlers: Delete
-	//router.Delete("url/{alias}", redirect.New(log, storage))
-
-	log.Info("starting server", slog.String("address", cfg.Address))
+	deleteHandler := url.NewDelete(log, storage)
+	router.DELETE("/delete/:alias", deleteHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Address,
@@ -70,41 +50,31 @@ func main() {
 		IdleTimeout:  cfg.HTTPServer.IdleTimeout,
 	}
 
-	if err = srv.ListenAndServe(); err != nil {
-		log.Error("failed to start server")
-	}
+	log.Info("server running", slog.String("address", cfg.Address))
 
-	log.Error("server stopped")
+	if err := srv.ListenAndServe(); err != nil {
+		log.Error("server error", slog.Any("err", err))
+	}
 }
 
 func setupLogger(env string) *slog.Logger {
-	var log *slog.Logger
-
-	color.NoColor = false
 	switch env {
-	case envLocal:
-		log = setupPrettySlog()
-	case envDev:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-		)
-	case envProd:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
-		)
-	}
-	return log
+	case "local":
+		handler := slogpretty.PrettyHandlerOptions{
+			SlogOpts: &slog.HandlerOptions{Level: slog.LevelDebug},
+		}.NewPrettyHandler(os.Stdout)
+		return slog.New(handler)
 
-}
-
-func setupPrettySlog() *slog.Logger {
-	opts := slogpretty.PrettyHandlerOptions{
-		SlogOpts: &slog.HandlerOptions{
+	case "dev":
+		return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			Level: slog.LevelDebug,
-		},
+		}))
+
+	case "prod":
+		return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		}))
 	}
 
-	handler := opts.NewPrettyHandler(os.Stdout)
-
-	return slog.New(handler)
+	return slog.Default()
 }

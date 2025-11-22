@@ -1,117 +1,64 @@
 package save
 
 import (
-	"errors"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
-	"github.com/go-playground/validator/v10"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"log/slog"
+
 	resp "go-short-url/internal/lib/api/response"
 	"go-short-url/internal/lib/logger/sl"
-	"go-short-url/internal/lib/random"
 	"go-short-url/internal/storage"
-	"log/slog"
-	"net/http"
 )
 
-// если вдруг забуду
-//Alias — это короткий код, который заменяет длинный URL
-
-// структура для запроса POST /save
 type Request struct {
-	URL   string `json:"url" validate:"required,url"`
-	Alias string `json:"alias,omitempty"`
+	URL   string `json:"url" binding:"required,url"`
+	Alias string `json:"alias"`
 }
 
-// структура ответа
 type Response struct {
 	resp.Response
-	Alias string `json:"alias,omitempty"`
+	Alias string `json:"alias"`
 }
-
-// TODO: move to config if needed
-const aliasLength = 6
 
 type URLSaver interface {
-	SaveURL(urlToSave string, alias string) (int64, error)
+	SaveURL(url string, alias string) (int64, error)
 }
 
-// Принимает запрос POST /save.
-// Проверяет входные данные (JSON + валидация).
-// Генерирует alias, если не передан.
-// Сохраняет в хранилище.
-// Отправляет JSON-ответ с alias.
-func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func New(log *slog.Logger, saver URLSaver) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		const op = "handlers.url.save.New"
 
-		// Добавляем к текущму объекту логгера поля op и request_id
-		// Они могут очень упростить нам жизнь в будущем
-		log = log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
-		)
+		log := log.With(slog.String("op", op))
 
-		// Создаем объект запроса и анмаршаллим в него запрос
 		var req Request
-
-		err := render.DecodeJSON(r.Body, &req)
-		if err != nil {
-			log.Error("failed to decode request body", sl.Err(err))
-
-			render.JSON(w, r, resp.Error("failed to decode request"))
-
+		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Error("failed to bind request", sl.Err(err))
+			c.JSON(http.StatusBadRequest, resp.Error("invalid request"))
 			return
 		}
 
-		log.Info("request body decoded", slog.Any("request", req))
-
-		// Валидируем структуру запроса
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("invalid request", sl.Err(err))
-
-			render.JSON(w, r, resp.Error("invalid request"))
-			render.JSON(w, r, resp.ValidationError(validateErr))
-
-			return
-		}
-
-		// Генерация alias, если не передан
 		alias := req.Alias
 		if alias == "" {
-			alias = random.NewRandomString(aliasLength)
+			alias = "rnd123" // временно, пока нет random
 		}
 
-		// Сохраняем URL через urlSaver
-		id, err := urlSaver.SaveURL(req.URL, alias)
-		if errors.Is(err, storage.ErrURLExists) {
-			log.Info("url already exists", slog.String("url", req.URL))
-
-			render.JSON(w, r, resp.Error("url already exists"))
-
-			return
-		}
+		_, err := saver.SaveURL(req.URL, alias)
 		if err != nil {
-			log.Error("failed to add url", sl.Err(err))
+			if err == storage.ErrURLExists {
+				log.Info("alias already exists")
+				c.JSON(http.StatusConflict, resp.Error("alias already exists"))
+				return
+			}
 
-			render.JSON(w, r, resp.Error("failed to add url"))
-
+			log.Error("failed to save url", sl.Err(err))
+			c.JSON(http.StatusInternalServerError, resp.Error("internal error"))
 			return
 		}
 
-		log.Info("url added", slog.Int64("id", id))
-
-		// Отправляем успешный JSON-ответ с alias
-		responseOK(w, r, alias)
-
+		c.JSON(http.StatusOK, Response{
+			Response: resp.OK(),
+			Alias:    alias,
+		})
 	}
-}
-
-// формирует успешный ответ с alias
-func responseOK(w http.ResponseWriter, r *http.Request, alias string) {
-	render.JSON(w, r, Response{
-		Response: resp.OK(),
-		Alias:    alias,
-	})
 }
